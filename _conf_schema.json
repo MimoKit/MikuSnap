@@ -1,0 +1,72 @@
+{
+  "auto_enable": {
+    "description": "是否自动解析消息中的网页链接",
+    "type": "bool",
+    "default": true
+  },
+  "max_urls_per_message": {
+    "description": "单条消息最多处理几个链接",
+    "type": "int",
+    "default": 2
+  },
+  "max_concurrency": {
+    "description": "同时截图的最大任务数",
+    "type": "int",
+    "default": 1
+  },
+  "stop_event_after_send": {
+    "description": "成功发送截图后是否阻止后续插件/LLM继续处理该消息",
+    "type": "bool",
+    "default": false
+  },
+  "block_private_hosts": {
+    "description": "跳过本机、内网、保留地址链接，降低 SSRF 风险",
+    "type": "bool",
+    "default": true
+  },
+  "viewport_width": {
+    "description": "浏览器视口宽度",
+    "type": "int",
+    "default": 1365
+  },
+  "viewport_height": {
+    "description": "浏览器视口高度",
+    "type": "int",
+    "default": 900
+  },
+  "load_timeout": {
+    "description": "网页加载超时时间（秒）",
+    "type": "float",
+    "default": 30.0
+  },
+  "screenshot_timeout": {
+    "description": "截图超时时间（秒）",
+    "type": "float",
+    "default": 30.0
+  },
+  "head_timeout": {
+    "description": "检查直链 Content-Type 的超时时间（秒）",
+    "type": "float",
+    "default": 8.0
+  },
+  "settle_delay": {
+    "description": "页面加载后等待动态内容稳定的时间（秒）",
+    "type": "float",
+    "default": 1.5
+  },
+  "user_agent": {
+    "description": "访问网页时使用的 User-Agent，留空则使用默认桌面浏览器 UA",
+    "type": "string",
+    "default": ""
+  },
+  "extra_video_hosts": {
+    "description": "额外跳过的视频网站域名列表，例如 example.com",
+    "type": "list",
+    "default": []
+  },
+  "debug_skip_log": {
+    "description": "是否在日志记录被跳过的链接原因",
+    "type": "bool",
+    "default": false
+  }
+}
