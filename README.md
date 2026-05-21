@@ -1,4 +1,4 @@
-> **严正声明：** 圈钱狗cnm
+> **严正声明：** 
 
 # AstrBot 网页自动截图插件
 
@@ -11,6 +11,7 @@
 - 自动跳过图片、音频、视频、压缩包、PDF、安装包等直链；
 - 链接被跳过或截图失败时，默认会把脱敏后的原因发送到聊天中；
 - 使用 Playwright Chromium 打开网页并截图；
+- 长网页先截完整长图，再用 Pillow 本地切成多张，避免动态网页分段截图漏内容；
 - 支持长网页按段截图，避免整页长图过大或看不清；
 - 支持将多张分图放进合并转发；
 - 支持配置解析显示名，例如 `小维解析`、`菲比Bot`；
@@ -40,6 +41,8 @@ playwright install chromium
 如果 AstrBot WebUI 支持插件依赖安装，也可以在 WebUI 中安装插件依赖。
 
 > 注意：Playwright 需要额外安装 Chromium 浏览器环境，因此必须执行 `playwright install chromium`。
+>
+> 长网页分图需要 `Pillow`，已写入 `requirements.txt`。如果你是手动升级旧版本，请重新执行 `pip install -r requirements.txt`。
 
 ## 使用方法
 
@@ -60,7 +63,7 @@ https://example.com
 
 脱敏会移除链接中的账号信息、查询参数和片段，例如 `?token=...`、`#...` 不会出现在提示和日志里。
 
-长网页默认会按 `segment_height` 高度拆成多张图，并用合并转发发送，效果类似：
+长网页默认会先截完整长图，再按 `segment_height` 高度切成多张图，并用合并转发发送。这样比直接按浏览器裁剪坐标截图更稳定，可以减少动态网页截图不完整的问题。效果类似：
 
 ```text
 小维解析 | 网页 群聊的聊天记录
@@ -114,7 +117,7 @@ https://example.com
 | `split_long_page` | 是否启用长网页分图截图 | `true` |
 | `segment_height` | 每张分图高度 | `900` |
 | `segment_overlap` | 分图之间重叠高度 | `80` |
-| `max_segments` | 单个网页最多发送的分图数量 | `8` |
+| `max_segments` | 单个网页最多发送的分图数量，太小可能导致超长网页后半部分不发送 | `8` |
 | `block_private_hosts` | 是否跳过本机、内网、保留地址 | `true` |
 | `viewport_width` | 浏览器视口宽度 | `1365` |
 | `viewport_height` | 浏览器视口高度 | `900` |

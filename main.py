@@ -507,9 +507,12 @@ class WebScreenshotPlugin(Star):
         screenshot_timeout: int,
     ) -> list[Path]:
         split_enabled = bool(_get_config_value(self.config, "split_long_page", True))
-        max_segments = max(1, int(_get_config_value(self.config, "max_segments", 8)))
+        max_segments = max(1, int(_get_config_value(self.config, "max_segments", 20)))
         overlap = max(0, int(_get_config_value(self.config, "segment_overlap", 80)))
-        page_size_script = """
+        segment_height = max(200, int(_get_config_value(self.config, "segment_height", viewport_height)))
+
+        page_size = await page.evaluate(
+            """
             () => ({
                 width: Math.max(
                     document.documentElement.scrollWidth,
@@ -523,74 +526,67 @@ class WebScreenshotPlugin(Star):
                 )
             })
             """
-
-        async def read_page_size() -> tuple[int, int]:
-            page_size = await page.evaluate(page_size_script)
-            width = min(max(int(page_size.get("width") or viewport_width), 1), viewport_width)
-            height = max(int(page_size.get("height") or viewport_height), 1)
-            return width, height
-
-        page_width, page_height = await read_page_size()
+        )
+        page_width = min(max(int(page_size.get("width") or viewport_width), 1), viewport_width)
+        page_height = max(int(page_size.get("height") or viewport_height), 1)
         self._log_debug(
             "页面尺寸："
             f"width={page_width} height={page_height} "
             f"split={split_enabled} max_segments={max_segments} overlap={overlap}"
         )
 
+        full_output = shot_dir / "page_full.png"
+        await page.screenshot(path=str(full_output), full_page=True, timeout=screenshot_timeout)
         if not split_enabled or page_height <= viewport_height:
-            output = shot_dir / "page_full.png"
-            await page.screenshot(path=str(output), full_page=True, timeout=screenshot_timeout)
-            return [output]
+            return [full_output]
 
-        segment_height = max(200, int(_get_config_value(self.config, "segment_height", viewport_height)))
-        step = max(1, segment_height - overlap)
-        paths: list[Path] = []
-        y = 0
-        index = 1
-        while len(paths) < max_segments:
-            current_width, current_height = await read_page_size()
-            if y >= current_height:
-                self._log_debug(f"分图停止：y={y} 已超出当前页面高度 {current_height}")
-                break
+        try:
+            from PIL import Image as PilImage
+        except Exception as exc:
+            self._log_debug(f"缺少 Pillow，无法本地切图，回退发送整页图：{_redact_text(str(exc))}")
+            return [full_output]
 
-            height = min(segment_height, current_height - y)
-            if height <= 0:
-                self._log_debug(f"分图停止：裁剪高度无效 y={y} height={height}")
-                break
-
-            output = shot_dir / f"page_{index:02d}.png"
-            self._log_debug(f"截取分图：index={index} y={y} height={height} output={output.name}")
-            try:
-                await page.screenshot(
-                    path=str(output),
-                    clip={"x": 0, "y": y, "width": current_width, "height": height},
-                    timeout=screenshot_timeout,
-                )
-            except Exception as exc:
+        try:
+            PilImage.MAX_IMAGE_PIXELS = None
+            with PilImage.open(full_output) as image:
+                image_width, image_height = image.size
                 self._log_debug(
-                    "分图截图失败，启用兜底："
-                    f"index={index} y={y} height={height} page_height={current_height} "
-                    f"error={_redact_text(str(exc))}"
+                    "整页截图完成，开始本地切图："
+                    f"image_width={image_width} image_height={image_height} segment_height={segment_height}"
                 )
-                if paths:
-                    break
 
-                fallback = shot_dir / "page_fallback_full.png"
-                await page.screenshot(path=str(fallback), full_page=True, timeout=screenshot_timeout)
-                return [fallback]
+                if image_height <= segment_height:
+                    return [full_output]
 
-            paths.append(output)
-            if y + height >= current_height:
-                break
-            y += step
-            index += 1
+                step = max(1, segment_height - overlap)
+                paths: list[Path] = []
+                y = 0
+                index = 1
+                while y < image_height and len(paths) < max_segments:
+                    bottom = min(y + segment_height, image_height)
+                    if bottom <= y:
+                        break
 
-        if paths:
-            return paths
+                    output = shot_dir / f"page_{index:02d}.png"
+                    self._log_debug(f"切出分图：index={index} y={y} bottom={bottom} output={output.name}")
+                    image.crop((0, y, image_width, bottom)).save(output, format="PNG")
+                    paths.append(output)
 
-        fallback = shot_dir / "page_fallback_full.png"
-        await page.screenshot(path=str(fallback), full_page=True, timeout=screenshot_timeout)
-        return [fallback]
+                    if bottom >= image_height:
+                        break
+                    y += step
+                    index += 1
+
+                if y < image_height and len(paths) >= max_segments:
+                    self._log_debug(
+                        "分图达到上限，页面可能被截断："
+                        f"max_segments={max_segments} last_y={y} image_height={image_height}"
+                    )
+
+                return paths or [full_output]
+        except Exception as exc:
+            self._log_debug(f"本地切图失败，回退发送整页图：{_redact_text(str(exc))}")
+            return [full_output]
 
     def _get_user_agent(self) -> str:
         configured = str(_get_config_value(self.config, "user_agent", "")).strip()
