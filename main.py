@@ -509,9 +509,7 @@ class WebScreenshotPlugin(Star):
         split_enabled = bool(_get_config_value(self.config, "split_long_page", True))
         max_segments = max(1, int(_get_config_value(self.config, "max_segments", 8)))
         overlap = max(0, int(_get_config_value(self.config, "segment_overlap", 80)))
-
-        page_size = await page.evaluate(
-            """
+        page_size_script = """
             () => ({
                 width: Math.max(
                     document.documentElement.scrollWidth,
@@ -525,9 +523,14 @@ class WebScreenshotPlugin(Star):
                 )
             })
             """
-        )
-        page_width = min(max(int(page_size.get("width") or viewport_width), 1), viewport_width)
-        page_height = max(int(page_size.get("height") or viewport_height), 1)
+
+        async def read_page_size() -> tuple[int, int]:
+            page_size = await page.evaluate(page_size_script)
+            width = min(max(int(page_size.get("width") or viewport_width), 1), viewport_width)
+            height = max(int(page_size.get("height") or viewport_height), 1)
+            return width, height
+
+        page_width, page_height = await read_page_size()
         self._log_debug(
             "页面尺寸："
             f"width={page_width} height={page_height} "
@@ -544,24 +547,50 @@ class WebScreenshotPlugin(Star):
         paths: list[Path] = []
         y = 0
         index = 1
-        while y < page_height and len(paths) < max_segments:
-            height = min(segment_height, page_height - y)
-            if height <= 0:
+        while len(paths) < max_segments:
+            current_width, current_height = await read_page_size()
+            if y >= current_height:
+                self._log_debug(f"分图停止：y={y} 已超出当前页面高度 {current_height}")
                 break
+
+            height = min(segment_height, current_height - y)
+            if height <= 0:
+                self._log_debug(f"分图停止：裁剪高度无效 y={y} height={height}")
+                break
+
             output = shot_dir / f"page_{index:02d}.png"
             self._log_debug(f"截取分图：index={index} y={y} height={height} output={output.name}")
-            await page.screenshot(
-                path=str(output),
-                clip={"x": 0, "y": y, "width": page_width, "height": height},
-                timeout=screenshot_timeout,
-            )
+            try:
+                await page.screenshot(
+                    path=str(output),
+                    clip={"x": 0, "y": y, "width": current_width, "height": height},
+                    timeout=screenshot_timeout,
+                )
+            except Exception as exc:
+                self._log_debug(
+                    "分图截图失败，启用兜底："
+                    f"index={index} y={y} height={height} page_height={current_height} "
+                    f"error={_redact_text(str(exc))}"
+                )
+                if paths:
+                    break
+
+                fallback = shot_dir / "page_fallback_full.png"
+                await page.screenshot(path=str(fallback), full_page=True, timeout=screenshot_timeout)
+                return [fallback]
+
             paths.append(output)
-            if y + height >= page_height:
+            if y + height >= current_height:
                 break
             y += step
             index += 1
 
-        return paths
+        if paths:
+            return paths
+
+        fallback = shot_dir / "page_fallback_full.png"
+        await page.screenshot(path=str(fallback), full_page=True, timeout=screenshot_timeout)
+        return [fallback]
 
     def _get_user_agent(self) -> str:
         configured = str(_get_config_value(self.config, "user_agent", "")).strip()
