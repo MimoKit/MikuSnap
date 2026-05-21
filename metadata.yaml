@@ -1,9 +1,9 @@
 name: astrbot_plugin_web_screenshot
 display_name: 网页自动截图
-version: 1.0.0
+version: 1.1.0
 author: Copilot
-desc: 自动识别聊天中的网页链接，跳过视频链接和直链，使用浏览器打开网页后保存整页截图并发送。
-short_desc: 自动解析网页链接并发送整页截图。
+desc: 自动识别聊天中的网页链接，跳过视频链接和直链，使用浏览器打开网页后按段截图并合并转发。
+short_desc: 自动解析网页链接，长网页分图并合并转发。
 repo: ""
 astrbot_version: ">=3.4.15"
 support_platforms:
