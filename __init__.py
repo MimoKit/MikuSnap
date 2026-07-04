@@ -1,0 +1,1 @@
+"""WebScreenshot GsCore plugin root."""

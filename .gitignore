@@ -1,21 +1,26 @@
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
 *$py.class
 
-# Python virtual environments
 .venv/
 venv/
 env/
 
-# Local runtime data
-/data/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.test_data/
 data/
+screenshots/
 *.log
 
-# IDE
+*.tar.gz
+*.zip
+
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
