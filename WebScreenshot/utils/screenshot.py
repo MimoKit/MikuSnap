@@ -554,7 +554,7 @@ class ScreenshotService:
         if use_forward:
             return MessageSegment.node([first_node_text, *image_segments])
 
-        return [first_node_text, *image_segments, f"\n{url}"] if len(image_segments) == 1 else [title_text, *image_segments]
+        return [first_node_text, *image_segments] if len(image_segments) == 1 else [title_text, *image_segments]
 
     def log_skip(self, url: str, result: dict[str, Any]) -> None:
         if not cfg_bool("debug_skip_log", True):
