@@ -37,11 +37,11 @@ DEFAULTS: dict[str, Any] = {
 def get_config_value(key: str, default: Any | None = None) -> Any:
     fallback = DEFAULTS[key] if key in DEFAULTS else default
     try:
-        from ..webscreenshot_config import WEBSHOT_CONFIG
+        from ..mikusnap_config import MIKUSNAP_CONFIG
     except (ImportError, ModuleNotFoundError):
         return fallback
     try:
-        return WEBSHOT_CONFIG.get_config(key).data
+        return MIKUSNAP_CONFIG.get_config(key).data
     except (AttributeError, KeyError, TypeError):
         return fallback
 

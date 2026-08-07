@@ -15,7 +15,7 @@ from gsuid_core.utils.plugins_config.models import (
 CONFIG_DEFAULT: Dict[str, GSC] = {
     "_DividerBasic": GsDivider("基础设置", ""),
     "enabled": GsBoolConfig(
-        "启用 WebScreenshot",
+        "启用 MikuSnap",
         "关闭后手动命令和自动解析都不再执行。",
         True,
     ),

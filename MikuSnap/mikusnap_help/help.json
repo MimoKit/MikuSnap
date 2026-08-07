@@ -1,0 +1,52 @@
+{
+  "截图命令": {
+    "desc": "手动触发网页截图",
+    "data": [
+      {
+        "name": "网页截图",
+        "eg": "网页截图 https://example.com",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "网页快照",
+        "eg": "网页快照 https://example.com",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      }
+    ]
+  },
+  "自动解析": {
+    "desc": "聊天中发送 http/https 链接，机器人自动截图",
+    "data": [
+      {
+        "name": "自动截图",
+        "eg": "随便发一条带链接的消息",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      }
+    ]
+  },
+  "功能说明": {
+    "desc": "行为规则",
+    "data": [
+      {
+        "name": "跳过规则",
+        "eg": "视频/直链/内网地址自动跳过",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "长页分图",
+        "eg": "超长网页按视口切成多张发送",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      }
+    ]
+  }
+}

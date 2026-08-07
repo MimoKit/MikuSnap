@@ -287,7 +287,7 @@ class ScreenshotService:
             except PlaywrightTimeoutError:
                 return self._skip_result("网页加载或截图超时", category="timeout")
             except Exception as exc:
-                logger.error(f"[WebScreenshot] screenshot failed: {redact_url(url)} {redact_text(str(exc))}")
+                logger.error(f"[MikuSnap] screenshot failed: {redact_url(url)} {redact_text(str(exc))}")
                 return self._skip_result("网页截图失败", category="screenshot_error", detail=str(exc))
         return {"ok": True, **screenshot}
 
@@ -560,7 +560,7 @@ class ScreenshotService:
         if not cfg_bool("debug_skip_log", True):
             return
         logger.info(
-            "[WebScreenshot] 跳过链接："
+            "[MikuSnap] 跳过链接："
             f"url={redact_url(url)} "
             f"reason={redact_text(str(result.get('reason') or '未知原因'))} "
             f"category={redact_text(str(result.get('category') or 'unknown'))} "
@@ -571,7 +571,7 @@ class ScreenshotService:
         if not cfg_bool("debug_success_log", True):
             return
         logger.info(
-            "[WebScreenshot] 截图完成："
+            "[MikuSnap] 截图完成："
             f"url={redact_url(url)} "
             f"title={redact_text(str(result.get('title') or ''))} "
             f"images={len(result.get('paths', []) or [])}"
@@ -579,4 +579,4 @@ class ScreenshotService:
 
     def _log_debug(self, message: str) -> None:
         if cfg_bool("debug_detail_log", False):
-            logger.info(f"[WebScreenshot] {message}")
+            logger.info(f"[MikuSnap] {message}")

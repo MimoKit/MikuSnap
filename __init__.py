@@ -1,1 +1,1 @@
-"""WebScreenshot GsCore plugin root."""
+"""MikuSnap GsCore plugin root."""

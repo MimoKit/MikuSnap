@@ -18,8 +18,8 @@ from ..utils.screenshot import (
     redact_url,
 )
 
-manual_sv = SV("WebScreenshot手动截图", priority=5, area="ALL")
-auto_sv = SV("WebScreenshot自动解析", priority=20, area="ALL")
+manual_sv = SV("MikuSnap手动截图", priority=5, area="ALL")
+auto_sv = SV("MikuSnap自动解析", priority=20, area="ALL")
 service = ScreenshotService()
 
 
@@ -97,7 +97,7 @@ async def screenshot_command(bot: Bot, ev: Event) -> None:
         await bot.send("请提供有效的 http/https 网页链接，例如：网页截图 https://example.com")
         return
 
-    logger.info(f"[WebScreenshot] 手动截图：url={redact_url(normalized_url)}")
+    logger.info(f"[MikuSnap] 手动截图：url={redact_url(normalized_url)}")
     result = await service.handle_url(normalized_url, force=True)
     await _send_result(bot, normalized_url, result)
 
@@ -116,7 +116,7 @@ async def auto_screenshot(bot: Bot, ev: Event) -> None:
     if not urls:
         return
 
-    logger.info(f"[WebScreenshot] 收到网页链接：count={len(urls)} urls={', '.join(redact_url(url) for url in urls)}")
+    logger.info(f"[MikuSnap] 收到网页链接：count={len(urls)} urls={', '.join(redact_url(url) for url in urls)}")
     max_urls = cfg_int("max_urls_per_message", 2, 1, 20)
     for url in urls[:max_urls]:
         result = await service.handle_url(url, force=False)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from gsuid_core.data_store import get_res_path
 
-MAIN_PATH = get_res_path() / "WebScreenshot"
+MAIN_PATH = get_res_path() / "MikuSnap"
 SCREENSHOT_PATH = MAIN_PATH / "screenshots"
 CACHE_PATH = MAIN_PATH / "cache"
 
