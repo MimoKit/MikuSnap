@@ -1,82 +1,84 @@
-# MikuSnap
+﻿# MikuSnap
 
 <p align="center">
-  <a href="https://github.com/MimoKit/MikuSnap"><img src="./ICON.png" width="160" alt="MikuSnap ICON"></a>
+  <a href="https://github.com/MimoKit/MikuSnap"><img src="ICON.png" width="160" alt="MikuSnap ICON"></a>
 </p>
+<h1 align="center">MikuSnap v1.2.0</h1>
+<h4 align="center">网页自动截图插件，适用于 GsCore / GsUID Core</h4>
+<div align="center">
+  <a href="https://github.com/MimoKit/MikuSnap" target="_blank">GitHub</a> &nbsp; · &nbsp;
+  <a href="https://github.com/Genshin-bots/gsuid_core" target="_blank">gsuid_core</a>
+</div>
 
-<h1 align="center">MikuSnap</h1>
-<h4 align="center">GsCore 初音未来主题网页自动截图插件</h4>
+## 丨安装提醒
 
-<p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.10%2B-blue.svg" alt="Python"></a>
-  <a href="https://github.com/Genshin-bots/gsuid_core"><img src="https://img.shields.io/badge/framework-GsCore-orange.svg" alt="Framework"></a>
-  <a href="https://github.com/MimoKit/MikuSnap/issues"><img src="https://img.shields.io/github/issues/MimoKit/MikuSnap.svg" alt="Issues"></a>
-  <a href="https://github.com/MimoKit/MikuSnap/stargazers"><img src="https://img.shields.io/github/stars/MimoKit/MikuSnap.svg?style=flat" alt="Stars"></a>
-</p>
-
-## 安装提醒
-
-> 该插件为 [早柚核心(gsuid_core)](https://github.com/Genshin-bots/gsuid_core) 的扩展，需要先安装好 GsCore 才能使用。
-
-> 首次使用需安装 Playwright 及 Chromium 浏览器：
+> **注意：该插件为 [早柚核心(gsuid_core)](https://github.com/Genshin-bots/gsuid_core) 的扩展，需要先安装好 GsCore 才能使用**
+>
+> **安装方式一：手动克隆到 GsCore 插件目录后重启 Core：**
+>
 > ```bash
-> pip install playwright
+> cd /path/to/gsuid_core/gsuid_core/plugins
+> git clone https://github.com/MimoKit/MikuSnap.git
+> ```
+>
+> **安装方式二：下载 ZIP 解压到插件目录后重启 Core**
+>
+> 插件依赖已写入 `pyproject.toml`，新版 GsCore 会自动检查安装；如果你的 GsCore 版本不会自动处理依赖，请在同一 Python 环境中手动安装：
+>
+> ```bash
+> pip install "httpx>=0.25.0" "playwright>=1.40.0" "Pillow>=10.0.0"
 > playwright install chromium
 > ```
+>
+> 插件交流请加群：[798949533](https://qm.qq.com/q/ejzCUfJ5le)
 
-## 功能
+## 丨功能
 
-- 🔗 **自动解析** — 监听聊天中的 http/https 链接，自动截图并发送
-- 📸 **手动截图** — `网页截图 <url>` / `网页快照 <url>` 强制截图指定网页
-- 🌙 **深色模式** — 默认以 `prefers-color-scheme: dark` 渲染，支持深色的网站自动切换暗色主题
-- 🚫 **智能过滤** — 视频站、直链（图片/文件）、内网/本机地址自动跳过
-- 📄 **长页分图** — 超长网页按视口高度用 Pillow 本地切成多张发送
-- 🔒 **并发控制** — 限制同时运行的截图任务数，避免刷屏
+- 监听聊天中的 http/https 链接，自动用 Playwright 截图并发送
+- 支持手动指定 URL 截图
+- 默认深色模式渲染，支持 `prefers-color-scheme: dark` 的网站自动切换暗色主题
+- 智能过滤视频站（B站/YouTube/抖音等）、直链（图片/文件/压缩包）、内网地址
+- 超长网页按视口高度用 Pillow 本地切成多张发送
+- 限制同时运行的截图任务数，避免刷屏
+- 可在 GsCore 控制台（webconsole）管理全部配置
 
-## 使用说明
+## 丨命令
 
-具体功能和命令请给 bot 发送：
+帮助：
 
 ```text
 网页截图帮助
+截图帮助
 ```
 
-bot 会返回插件帮助图，按帮助图里的说明使用即可。
+手动截图：
 
-## 指令
+```text
+网页截图 https://example.com
+网页快照 https://example.com
+```
 
-| 指令 | 说明 | 权限 |
-|------|------|------|
-| `网页截图 <url>` | 手动截图指定网页 | 所有人 |
-| `网页快照 <url>` | 同上 | 所有人 |
-| `网页截图帮助` / `截图帮助` | 查看帮助图 | 所有人 |
+自动截图不需要命令，群聊/私聊中直接发送带链接的消息即可触发（可在配置中关闭）。
 
-群聊/私聊中直接发送带链接的消息即可触发自动截图（可在配置中关闭）。
+## 丨常用配置
 
-## 控制台配置
+配置项可在 GsCore 控制台中修改，一般只需要关注下面几项：
 
-进入 webconsole → 插件管理 → `MikuSnap`：
-
-| 分区 | 配置项 | 说明 |
+| 配置 | 默认值 | 说明 |
 |------|--------|------|
-| **基础设置** | `启用 MikuSnap` | 总开关 |
-| | `自动解析网页链接` | 是否自动监听聊天中的链接 |
-| | `单条消息最多处理链接数` | 避免一条消息大量链接刷屏 |
-| | `最大并发截图数` | 同时运行的 Playwright 任务数 |
-| | `发送跳过/失败原因` | 链接被跳过时是否发送脱敏原因 |
-| **发送样式** | `长网页合并转发` | 多张分图时合并转发 |
-| | `外层标题模板` / `第一条文字模板` | 可用 `{ai_name}`、`{title}`、`{url}` 等变量 |
-| **截图参数** | `深色模式` | 默认开启，浏览器以深色主题渲染网页 |
-| | `浏览器视口宽度` / `视口高度` | Chromium 页面尺寸 |
-| | `网页加载超时秒数` / `截图超时秒数` | 超时控制 |
-| | `长网页分图` / `每张分图高度` / `分图重叠高度` | 长页切图参数 |
-| **过滤规则** | `跳过内网/本机地址` | 跳过 localhost、内网等 |
-| | `额外视频站域名` | 自定义需要跳过的视频站 |
-| | `User-Agent` | 留空使用默认桌面浏览器 UA |
-| **日志** | `记录跳过日志` / `记录成功日志` / `详细调试日志` | 控制台日志开关 |
+| 启用 MikuSnap | ✅ | 总开关，关闭后手动命令和自动解析都不执行 |
+| 自动解析网页链接 | ✅ | 是否自动监听聊天中的链接 |
+| 深色模式 | ✅ | 以 `prefers-color-scheme: dark` 渲染网页 |
+| 单条消息最多处理链接数 | 2 | 避免一条消息大量链接刷屏 |
+| 最大并发截图数 | 1 | 同时运行的 Playwright 任务数 |
+| 长网页分图 | ✅ | 超长网页本地切成多张发送 |
+| 浏览器视口宽度 | 1365 | Chromium 页面宽度 |
+| 浏览器视口高度 | 900 | Chromium 页面高度 |
+| 跳过内网/本机地址 | ✅ | 跳过 localhost、内网、保留地址 |
 
-## 目录结构
+更多配置（发送样式模板、超时参数、日志开关等）请在控制台查看。
+
+## 丨目录结构
 
 ```
 MikuSnap/
@@ -94,7 +96,7 @@ MikuSnap/
     └── utils/                # 截图服务、配置读取、资源路径
 ```
 
-## 其他
+## 丨其他
 
 - 本项目仅供学习使用，请勿用于商业用途。
 - 本项目采用 **GNU General Public License v3.0（GPLv3）** 开源。你可以使用、修改和分发，但需保留许可证与版权声明；分发修改版时按 GPLv3 继续开放对应源码。
