@@ -341,6 +341,7 @@ class ScreenshotService:
         load_timeout = int(cfg_float("load_timeout", 30.0, 1.0, 180.0) * 1000)
         screenshot_timeout = int(cfg_float("screenshot_timeout", 30.0, 1.0, 180.0) * 1000)
         user_agent = self._get_user_agent()
+        color_scheme = "dark" if cfg_bool("dark_mode", True) else "light"
 
         safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", urlparse(url).netloc)[:80] or "page"
         shot_dir = self.output_dir / f"{int(time.time() * 1000)}_{safe_name}"
@@ -361,6 +362,7 @@ class ScreenshotService:
                 viewport={"width": viewport_width, "height": viewport_height},
                 user_agent=user_agent,
                 ignore_https_errors=True,
+                color_scheme=color_scheme,
             )
             try:
                 page = await context.new_page()

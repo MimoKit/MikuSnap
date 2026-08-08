@@ -71,6 +71,11 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
         "{ai_name} | 网页\n{title}",
     ),
     "_DividerCapture": GsDivider("截图参数", ""),
+    "dark_mode": GsBoolConfig(
+        "深色模式",
+        "开启后浏览器以 prefers-color-scheme: dark 渲染网页，支持深色模式的网站会自动切换。",
+        True,
+    ),
     "split_long_page": GsBoolConfig(
         "长网页分图",
         "开启后先截整页，再用 Pillow 本地切成多张。",
