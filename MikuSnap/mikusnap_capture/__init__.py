@@ -8,7 +8,6 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 from gsuid_core.sv import SV
 
-from ..utils.config import cfg_bool, cfg_int
 from ..utils.screenshot import (
     MANUAL_COMMANDS,
     ScreenshotService,
@@ -21,6 +20,7 @@ from ..utils.screenshot import (
 manual_sv = SV("MikuSnap手动截图", priority=5, area="ALL")
 auto_sv = SV("MikuSnap自动解析", priority=20, area="ALL")
 service = ScreenshotService()
+MAX_URLS_PER_MESSAGE = 2
 
 
 def _string_attr(obj: object, name: str) -> str:
@@ -87,9 +87,6 @@ async def _send_result(bot: Bot, url: str, result: dict[str, Any]) -> None:
 @manual_sv.on_command(MANUAL_COMMANDS, block=True, prefix=False)
 async def screenshot_command(bot: Bot, ev: Event) -> None:
     """手动截图网页：网页截图 https://example.com"""
-    if not cfg_bool("enabled", True):
-        return
-
     url_text = _string_attr(ev, "text").strip()
     urls = extract_urls(url_text)
     normalized_url = normalize_url(urls[0] if urls else url_text)
@@ -105,9 +102,6 @@ async def screenshot_command(bot: Bot, ev: Event) -> None:
 @auto_sv.on_message(block=False, prefix=False)
 async def auto_screenshot(bot: Bot, ev: Event) -> None:
     """自动解析消息中的网页链接并发送截图。"""
-    if not cfg_bool("enabled", True) or not cfg_bool("auto_enable", True):
-        return
-
     message = _event_text(ev)
     if not message or looks_like_manual_command(message):
         return
@@ -117,13 +111,11 @@ async def auto_screenshot(bot: Bot, ev: Event) -> None:
         return
 
     logger.info(f"[MikuSnap] 收到网页链接：count={len(urls)} urls={', '.join(redact_url(url) for url in urls)}")
-    max_urls = cfg_int("max_urls_per_message", 2, 1, 20)
-    for url in urls[:max_urls]:
+    for url in urls[:MAX_URLS_PER_MESSAGE]:
         result = await service.handle_url(url, force=False)
         if result["ok"]:
             service.log_success(url, result)
             await bot.send(service.build_message(result, url))
             continue
         service.log_skip(url, result)
-        if cfg_bool("send_skip_reason", True):
-            await bot.send(service.build_skip_reason_message(url, result))
+        await bot.send(service.build_skip_reason_message(url, result))

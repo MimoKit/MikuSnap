@@ -9,10 +9,12 @@ from typing import Any
 from urllib.parse import unquote, urlparse, urlunparse
 
 import httpx
+from PIL import Image
 from gsuid_core.logger import logger
 from gsuid_core.segment import MessageSegment
 
-from .config import cfg_bool, cfg_float, cfg_int, cfg_list_str, cfg_str
+from .config import dark_mode_enabled
+from .image_quality import is_blank_image
 from .resource.RESOURCE_PATH import SCREENSHOT_PATH
 
 try:
@@ -24,6 +26,61 @@ except Exception:  # pragma: no cover
 
 URL_RE = re.compile(r"https?://[^\s<>'\"，。！？、（）()【】\[\]{}]+", re.IGNORECASE)
 MANUAL_COMMANDS = ("网页截图", "webshot", "网页快照")
+VIEWPORT_WIDTH = 1365
+VIEWPORT_HEIGHT = 900
+LOAD_TIMEOUT_MS = 30_000
+SCREENSHOT_TIMEOUT_MS = 30_000
+HEAD_TIMEOUT_SECONDS = 8.0
+SETTLE_DELAY_MS = 1_500
+MAX_SEGMENTS = 8
+SEGMENT_HEIGHT = 900
+SEGMENT_OVERLAP = 80
+MAX_CONCURRENCY = 1
+AI_NAME = "解析"
+SKIP_REASON_TEMPLATE = "网页截图已跳过：{reason}\n链接：{url}"
+
+DARK_MODE_INIT_SCRIPT = """
+() => {
+    const keys = ['theme', 'color-theme', 'colorTheme', 'color-mode', 'colorMode'];
+    for (const key of keys) {
+        try {
+            localStorage.setItem(key, 'dark');
+        } catch (_) {
+            // Some origins disable localStorage. Media emulation still applies.
+        }
+    }
+}
+"""
+
+DARK_MODE_APPLY_SCRIPT = """
+() => {
+    const root = document.documentElement;
+    root.style.colorScheme = 'dark';
+    root.classList.add('dark', 'dark-mode');
+    root.setAttribute('data-theme', 'dark');
+    root.setAttribute('data-color-mode', 'dark');
+}
+"""
+
+LAZY_LOAD_SCRIPT = """
+async () => {
+    const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const step = Math.max(Math.floor(window.innerHeight * 0.8), 400);
+    for (let round = 0; round < 3; round += 1) {
+        const height = Math.min(
+            Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight || 0),
+            window.innerHeight * 12
+        );
+        for (let y = 0; y < height; y += step) {
+            window.scrollTo(0, y);
+            await delay(80);
+        }
+        await delay(200);
+    }
+    window.scrollTo(0, 0);
+    await delay(300);
+}
+"""
 
 VIDEO_HOST_KEYWORDS = (
     "bilibili.com",
@@ -111,6 +168,10 @@ SKIP_CONTENT_TYPE_PREFIXES = (
     "application/x-7z",
     "application/octet-stream",
 )
+
+
+class BlankScreenshotError(RuntimeError):
+    pass
 
 
 def normalize_url(raw_url: str) -> str | None:
@@ -234,14 +295,7 @@ class ScreenshotService:
     def __init__(self) -> None:
         self.output_dir = SCREENSHOT_PATH
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._lock = asyncio.Semaphore(cfg_int("max_concurrency", 1, 1, 20))
-        self._lock_size = cfg_int("max_concurrency", 1, 1, 20)
-
-    def _refresh_lock(self) -> None:
-        current = cfg_int("max_concurrency", 1, 1, 20)
-        if current != self._lock_size:
-            self._lock = asyncio.Semaphore(current)
-            self._lock_size = current
+        self._lock = asyncio.Semaphore(MAX_CONCURRENCY)
 
     async def handle_url(self, url: str, force: bool) -> dict[str, Any]:
         if async_playwright is None:
@@ -251,8 +305,7 @@ class ScreenshotService:
                 detail="请安装依赖后执行：playwright install chromium",
             )
 
-        extra_video_hosts = cfg_list_str("extra_video_hosts")
-        if not force and _is_video_url(url, extra_video_hosts):
+        if not force and _is_video_url(url, []):
             return self._skip_result(
                 "视频链接已跳过",
                 category="video_url",
@@ -265,7 +318,7 @@ class ScreenshotService:
                 detail=f"suffix={url_path_suffix(url) or ''}",
             )
 
-        if cfg_bool("block_private_hosts", True) and not await _is_public_host(url):
+        if not await _is_public_host(url):
             return self._skip_result(
                 "已跳过本机/内网/保留地址链接",
                 category="private_host",
@@ -280,10 +333,12 @@ class ScreenshotService:
                 detail=str(direct_check),
             )
 
-        self._refresh_lock()
         async with self._lock:
             try:
                 screenshot = await self._screenshot_page(url)
+            except BlankScreenshotError:
+                logger.warning(f"[MikuSnap] 页面截图为空：url={redact_url(url)}")
+                return self._skip_result("页面未渲染出有效内容", category="blank_screenshot")
             except PlaywrightTimeoutError:
                 return self._skip_result("网页加载或截图超时", category="timeout")
             except Exception as exc:
@@ -302,12 +357,12 @@ class ScreenshotService:
         }
 
     async def _check_direct_link_by_content_type(self, url: str) -> dict[str, Any] | None:
-        timeout = cfg_float("head_timeout", 8.0, 1.0, 60.0)
-        headers = {"User-Agent": self._get_user_agent()}
+        timeout = HEAD_TIMEOUT_SECONDS
+        headers = {"User-Agent": self._default_user_agent()}
         try:
             async with httpx.AsyncClient(follow_redirects=False, timeout=timeout, headers=headers) as client:
                 response = await client.head(url)
-                self._log_debug(
+                logger.debug(
                     "直链 HEAD 检查："
                     f"url={redact_url(url)} "
                     f"status={response.status_code} "
@@ -317,14 +372,14 @@ class ScreenshotService:
                     return None
                 if response.status_code in {405, 403} or not response.headers.get("content-type"):
                     response = await client.get(url, headers={"Range": "bytes=0-0"})
-                    self._log_debug(
+                    logger.debug(
                         "直链 GET Range 检查："
                         f"url={redact_url(url)} "
                         f"status={response.status_code} "
                         f"content_type={response.headers.get('content-type', '')}"
                     )
         except Exception as exc:
-            self._log_debug(f"直链类型检查失败：url={redact_url(url)} error={redact_text(str(exc))}")
+            logger.debug(f"[MikuSnap] 直链类型检查失败：url={redact_url(url)} error={redact_text(str(exc))}")
             return None
 
         content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
@@ -336,50 +391,45 @@ class ScreenshotService:
         return None
 
     async def _screenshot_page(self, url: str) -> dict[str, Any]:
-        viewport_width = cfg_int("viewport_width", 1365, 320, 4096)
-        viewport_height = cfg_int("viewport_height", 900, 320, 4096)
-        load_timeout = int(cfg_float("load_timeout", 30.0, 1.0, 180.0) * 1000)
-        screenshot_timeout = int(cfg_float("screenshot_timeout", 30.0, 1.0, 180.0) * 1000)
-        user_agent = self._get_user_agent()
-        color_scheme = "dark" if cfg_bool("dark_mode", True) else "light"
+        color_scheme = "dark" if dark_mode_enabled() else "light"
 
         safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", urlparse(url).netloc)[:80] or "page"
         shot_dir = self.output_dir / f"{int(time.time() * 1000)}_{safe_name}"
         shot_dir.mkdir(parents=True, exist_ok=True)
 
         async with async_playwright() as p:
-            self._log_debug(
+            logger.debug(
                 "开始截图："
                 f"url={redact_url(url)} "
-                f"viewport={viewport_width}x{viewport_height} "
-                f"load_timeout={load_timeout}ms screenshot_timeout={screenshot_timeout}ms"
+                f"viewport={VIEWPORT_WIDTH}x{VIEWPORT_HEIGHT} "
+                f"color_scheme={color_scheme}"
             )
             browser = await p.chromium.launch(
                 headless=True,
                 args=["--disable-dev-shm-usage", "--no-sandbox"],
             )
             context = await browser.new_context(
-                viewport={"width": viewport_width, "height": viewport_height},
-                user_agent=user_agent,
+                viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+                user_agent=self._default_user_agent(),
                 ignore_https_errors=True,
                 color_scheme=color_scheme,
             )
             try:
                 page = await context.new_page()
-                try:
-                    await page.goto(url, wait_until="networkidle", timeout=load_timeout)
-                except PlaywrightTimeoutError:
-                    await page.goto(url, wait_until="domcontentloaded", timeout=load_timeout)
-                await page.wait_for_timeout(int(cfg_float("settle_delay", 1.5, 0.0, 30.0) * 1000))
+                await page.emulate_media(color_scheme=color_scheme)
+                if color_scheme == "dark":
+                    await page.add_init_script(DARK_MODE_INIT_SCRIPT)
+                await page.goto(url, wait_until="domcontentloaded", timeout=LOAD_TIMEOUT_MS)
+                if color_scheme == "dark":
+                    await page.evaluate(DARK_MODE_APPLY_SCRIPT)
+                await page.evaluate(LAZY_LOAD_SCRIPT)
+                await page.wait_for_timeout(SETTLE_DELAY_MS)
 
                 title = (await page.title()).strip() or urlparse(url).netloc or "网页"
-                self._log_debug(f"页面加载完成：url={redact_url(url)} title={redact_text(title)}")
+                logger.debug(f"[MikuSnap] 页面加载完成：url={redact_url(url)} title={redact_text(title)}")
                 paths = await self._capture_page_segments(
                     page=page,
                     shot_dir=shot_dir,
-                    viewport_width=viewport_width,
-                    viewport_height=viewport_height,
-                    screenshot_timeout=screenshot_timeout,
                 )
             finally:
                 await context.close()
@@ -391,15 +441,7 @@ class ScreenshotService:
         self,
         page: Any,
         shot_dir: Path,
-        viewport_width: int,
-        viewport_height: int,
-        screenshot_timeout: int,
     ) -> list[Path]:
-        split_enabled = cfg_bool("split_long_page", True)
-        max_segments = cfg_int("max_segments", 8, 1, 80)
-        overlap = cfg_int("segment_overlap", 80, 0, 2000)
-        segment_height = cfg_int("segment_height", viewport_height, 200, 10000)
-
         page_size = await page.evaluate(
             """
             () => ({
@@ -416,49 +458,53 @@ class ScreenshotService:
             })
             """
         )
-        page_width = min(max(int(page_size.get("width") or viewport_width), 1), viewport_width)
-        page_height = max(int(page_size.get("height") or viewport_height), 1)
-        self._log_debug(
+        page_width = min(max(int(page_size.get("width") or VIEWPORT_WIDTH), 1), VIEWPORT_WIDTH)
+        page_height = max(int(page_size.get("height") or VIEWPORT_HEIGHT), 1)
+        logger.debug(
             "页面尺寸："
             f"width={page_width} height={page_height} "
-            f"split={split_enabled} max_segments={max_segments} overlap={overlap}"
+            f"max_segments={MAX_SEGMENTS} overlap={SEGMENT_OVERLAP}"
         )
 
         full_output = shot_dir / "page_full.png"
-        await page.screenshot(path=str(full_output), full_page=True, timeout=screenshot_timeout)
-        if not split_enabled or page_height <= viewport_height:
-            return [full_output]
+        await page.screenshot(path=str(full_output), full_page=True, timeout=SCREENSHOT_TIMEOUT_MS)
+        Image.MAX_IMAGE_PIXELS = None
+        with Image.open(full_output) as image:
+            if is_blank_image(image):
+                full_output.unlink()
+                shot_dir.rmdir()
+                raise BlankScreenshotError
 
-        try:
-            from PIL import Image as PilImage
-        except Exception as exc:
-            self._log_debug(f"缺少 Pillow，无法本地切图，回退发送整页图：{redact_text(str(exc))}")
-            return [full_output]
+            if page_height <= VIEWPORT_HEIGHT:
+                return [full_output]
 
-        try:
-            PilImage.MAX_IMAGE_PIXELS = None
-            with PilImage.open(full_output) as image:
+            try:
                 image_width, image_height = image.size
-                self._log_debug(
+                logger.debug(
                     "整页截图完成，开始本地切图："
-                    f"image_width={image_width} image_height={image_height} segment_height={segment_height}"
+                    f"image_width={image_width} image_height={image_height} segment_height={SEGMENT_HEIGHT}"
                 )
 
-                if image_height <= segment_height:
+                if image_height <= SEGMENT_HEIGHT:
                     return [full_output]
 
-                step = max(1, segment_height - overlap)
+                step = max(1, SEGMENT_HEIGHT - SEGMENT_OVERLAP)
                 paths: list[Path] = []
                 y = 0
                 index = 1
-                while y < image_height and len(paths) < max_segments:
-                    bottom = min(y + segment_height, image_height)
+                while y < image_height and len(paths) < MAX_SEGMENTS:
+                    bottom = min(y + SEGMENT_HEIGHT, image_height)
                     if bottom <= y:
                         break
 
                     output = shot_dir / f"page_{index:02d}.png"
-                    self._log_debug(f"切出分图：index={index} y={y} bottom={bottom} output={output.name}")
-                    image.crop((0, y, image_width, bottom)).save(output, format="PNG")
+                    segment = image.crop((0, y, image_width, bottom))
+                    if is_blank_image(segment):
+                        logger.info(f"[MikuSnap] 丢弃空白分图：index={index} y={y} bottom={bottom}")
+                        y += step
+                        index += 1
+                        continue
+                    segment.save(output, format="PNG")
                     paths.append(output)
 
                     if bottom >= image_height:
@@ -466,20 +512,16 @@ class ScreenshotService:
                     y += step
                     index += 1
 
-                if y < image_height and len(paths) >= max_segments:
-                    self._log_debug(
+                if y < image_height and len(paths) >= MAX_SEGMENTS:
+                    logger.debug(
                         "分图达到上限，页面可能被截断："
-                        f"max_segments={max_segments} last_y={y} image_height={image_height}"
+                        f"max_segments={MAX_SEGMENTS} last_y={y} image_height={image_height}"
                     )
 
                 return paths or [full_output]
-        except Exception as exc:
-            self._log_debug(f"本地切图失败，回退发送整页图：{redact_text(str(exc))}")
-            return [full_output]
-
-    def _get_user_agent(self) -> str:
-        configured = cfg_str("user_agent", "").strip()
-        return configured or self._default_user_agent()
+            except OSError as exc:
+                logger.warning(f"[MikuSnap] 本地切图失败，回退发送整页图：{redact_text(str(exc))}")
+                return [full_output]
 
     @staticmethod
     def _default_user_agent() -> str:
@@ -494,52 +536,18 @@ class ScreenshotService:
         title = re.sub(r"\s+", " ", title).strip()
         return title[:80] or "网页"
 
-    @staticmethod
-    def _format_template(template: str, **values: Any) -> str:
-        try:
-            return template.format(**values)
-        except Exception:
-            return str(values.get("ai_name") or "网页")
-
     def build_skip_reason_message(self, url: str, result: dict[str, Any]) -> str:
-        template = cfg_str("skip_reason_template", "网页截图已跳过：{reason}\n链接：{url}")
         reason = redact_text(str(result.get("public_reason") or result.get("reason") or "未知原因"))
         redacted_url = redact_url(url)
-        values = {
-            "reason": reason,
-            "url": redacted_url,
-            "host": redact_text(urlparse(url).hostname or ""),
-            "suffix": url_path_suffix(url) or "",
-        }
-        try:
-            return template.format(**values)
-        except Exception:
-            return f"网页截图已跳过：{reason}\n链接：{redacted_url}"
+        return SKIP_REASON_TEMPLATE.format(
+            reason=reason,
+            url=redacted_url,
+        )
 
     def build_message(self, result: dict[str, Any], url: str) -> Any:
         paths = [str(path) for path in result.get("paths", []) if path]
         title = self._clean_title(str(result.get("title") or urlparse(url).netloc or "网页"))
-        ai_name = cfg_str("ai_name", "解析").strip() or "解析"
-        forward_title_template = cfg_str("forward_title_template", "{ai_name} | 网页 {title}")
-        first_node_template = cfg_str("first_node_template", "{ai_name} | 网页\n{title}")
-        use_forward = cfg_bool("forward_enable", True) and len(paths) > 1
-
-        title_text = self._format_template(
-            forward_title_template,
-            ai_name=ai_name,
-            title=title,
-            bot_name=title,
-            url=url,
-            page_count=len(paths),
-        )
-        first_node_text = self._format_template(
-            first_node_template,
-            ai_name=ai_name,
-            title=title,
-            bot_name=title,
-            url=url,
-            page_count=len(paths),
-        )
+        first_node_text = f"{AI_NAME} | 网页\n{title}"
 
         if not paths:
             return f"{first_node_text}\n截图失败：未生成图片"
@@ -553,14 +561,12 @@ class ScreenshotService:
         if not image_segments:
             return f"{first_node_text}\n截图失败：图片文件不存在"
 
-        if use_forward:
+        if len(image_segments) > 1:
             return MessageSegment.node([first_node_text, *image_segments])
 
-        return [first_node_text, *image_segments] if len(image_segments) == 1 else [title_text, *image_segments]
+        return [first_node_text, *image_segments]
 
     def log_skip(self, url: str, result: dict[str, Any]) -> None:
-        if not cfg_bool("debug_skip_log", True):
-            return
         logger.info(
             "[MikuSnap] 跳过链接："
             f"url={redact_url(url)} "
@@ -570,15 +576,9 @@ class ScreenshotService:
         )
 
     def log_success(self, url: str, result: dict[str, Any]) -> None:
-        if not cfg_bool("debug_success_log", True):
-            return
         logger.info(
             "[MikuSnap] 截图完成："
             f"url={redact_url(url)} "
             f"title={redact_text(str(result.get('title') or ''))} "
             f"images={len(result.get('paths', []) or [])}"
         )
-
-    def _log_debug(self, message: str) -> None:
-        if cfg_bool("debug_detail_log", False):
-            logger.info(f"[MikuSnap] {message}")

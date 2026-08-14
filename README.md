@@ -3,7 +3,7 @@
 <p align="center">
   <a href="https://github.com/MimoKit/MikuSnap"><img src="ICON.png" width="160" alt="MikuSnap ICON"></a>
 </p>
-<h1 align="center">MikuSnap v1.2.0</h1>
+<h1 align="center">MikuSnap v1.3.0</h1>
 <h4 align="center">网页自动截图插件，适用于 GsCore / GsUID Core</h4>
 <div align="center">
   <a href="https://github.com/MimoKit/MikuSnap" target="_blank">GitHub</a> &nbsp; · &nbsp;
@@ -37,10 +37,11 @@
 - 监听聊天中的 http/https 链接，自动用 Playwright 截图并发送
 - 支持手动指定 URL 截图
 - 默认深色模式渲染，支持 `prefers-color-scheme: dark` 的网站自动切换暗色主题
+- 截图前预滚动页面以触发懒加载，并自动丢弃纯白、纯黑等空白截图
 - 智能过滤视频站（B站/YouTube/抖音等）、直链（图片/文件/压缩包）、内网地址
 - 超长网页按视口高度用 Pillow 本地切成多张发送
 - 限制同时运行的截图任务数，避免刷屏
-- 可在 GsCore 控制台（webconsole）管理全部配置
+- 可在 GsCore 控制台（webconsole）开关深色模式
 
 ## 丨命令
 
@@ -58,25 +59,17 @@
 网页快照 https://example.com
 ```
 
-自动截图不需要命令，群聊/私聊中直接发送带链接的消息即可触发（可在配置中关闭）。
+自动截图不需要命令，群聊/私聊中直接发送带链接的消息即可触发；需要停用时可在 GsCore 服务管理中关闭对应 SV。
 
-## 丨常用配置
+## 丨配置
 
-配置项可在 GsCore 控制台中修改，一般只需要关注下面几项：
+插件只保留一个需要用户控制的配置项：
 
 | 配置 | 默认值 | 说明 |
 |------|--------|------|
-| 启用 MikuSnap | ✅ | 总开关，关闭后手动命令和自动解析都不执行 |
-| 自动解析网页链接 | ✅ | 是否自动监听聊天中的链接 |
-| 深色模式 | ✅ | 以 `prefers-color-scheme: dark` 渲染网页 |
-| 单条消息最多处理链接数 | 2 | 避免一条消息大量链接刷屏 |
-| 最大并发截图数 | 1 | 同时运行的 Playwright 任务数 |
-| 长网页分图 | ✅ | 超长网页本地切成多张发送 |
-| 浏览器视口宽度 | 1365 | Chromium 页面宽度 |
-| 浏览器视口高度 | 900 | Chromium 页面高度 |
-| 跳过内网/本机地址 | ✅ | 跳过 localhost、内网、保留地址 |
+| 深色模式 | ✅ | 声明深色媒体偏好，并应用常见的网站深色主题标记 |
 
-更多配置（发送样式模板、超时参数、日志开关等）请在控制台查看。
+截图参数、过滤规则和发送样式使用插件内置的稳定默认值。运行日志统一交给 GsCore 日志系统管理。
 
 ## 丨目录结构
 

@@ -1,1 +1,1 @@
-MikuSnap_version = "1.2.0"
+MikuSnap_version = "1.3.0"
