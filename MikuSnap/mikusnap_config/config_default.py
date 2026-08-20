@@ -7,6 +7,7 @@ from gsuid_core.utils.plugins_config.models import (
     GsBoolConfig,
     GsDivider,
     GsFloatConfig,
+    GsListStrConfig,
     GsStrConfig,
 )
 
@@ -58,5 +59,28 @@ CONFIG_DEFAULT: Dict[str, GSC] = {
         600.0,
         min_value=0.0,
         max_value=86400.0,
+    ),
+    "_DividerFilter": GsDivider("过滤规则", ""),
+    "block_hosts": GsListStrConfig(
+        "额外屏蔽网站",
+        "一行一个域名或完整链接。自动/手动截图都会跳过。内置已覆盖常见国内外查 IP 站。",
+        [],
+    ),
+    "screenshot_http_proxy": GsStrConfig(
+        "截图出口代理（伪装 IP）",
+        "固定 HTTP/SOCKS 代理，代理池提取失败时作为兜底。例如 http://127.0.0.1:7890。",
+        "",
+    ),
+    "proxy_pool_api": GsStrConfig(
+        "IP 代理池提取 API",
+        "每次截图前请求该地址，解析返回的 ip:port，用代理池 IP 访问网页。密钥写在 URL 参数里。稻米/蚂蚁示例：http://host:7771/dmgetip.asp?apikey=***&pwd=***&getnum=1&httptype=1&geshi=1&operate=all",
+        "",
+        secret=True,
+    ),
+    "proxy_pool_scheme": GsStrConfig(
+        "代理池协议",
+        "把提取到的 ip:port 拼成 Playwright 代理。httptype=1 选 http，SOCKS 选 socks5。",
+        "http",
+        options=["http", "https", "socks5"],
     ),
 }

@@ -13,9 +13,17 @@ from PIL import Image
 from gsuid_core.logger import logger
 from gsuid_core.segment import MessageSegment
 
-from .config import dark_mode_enabled
+from .config import cfg_list_str, dark_mode_enabled, screenshot_http_proxy
 from .github_proxy import github_http_proxy, is_github_fetch_url, resolve_github_url
 from .image_quality import is_blank_image
+from .ip_guard import (
+    IpCheckPageError,
+    build_ip_leak_scold,
+    detect_ip_check_page,
+    detect_ip_check_url,
+    match_block_hosts,
+)
+from .proxy_pool import fetch_proxy_pool_server
 from .resource.RESOURCE_PATH import SCREENSHOT_PATH
 
 try:
@@ -84,8 +92,31 @@ async () => {
 }
 """
 
+WEBRTC_BLOCK_SCRIPT = """
+() => {
+    try {
+        Object.defineProperty(window, 'RTCPeerConnection', { configurable: false, writable: false, value: undefined });
+        Object.defineProperty(window, 'webkitRTCPeerConnection', { configurable: false, writable: false, value: undefined });
+        Object.defineProperty(window, 'mozRTCPeerConnection', { configurable: false, writable: false, value: undefined });
+    } catch (_) {
+        window.RTCPeerConnection = undefined;
+        window.webkitRTCPeerConnection = undefined;
+    }
+}
+"""
+
+PAGE_SAMPLE_SCRIPT = """
+() => ({
+    title: document.title || '',
+    text: document.body ? String(document.body.innerText || '').slice(0, 4000) : ''
+})
+"""
+
 VIDEO_HOST_KEYWORDS = (
     "bilibili.com",
+    "b23.tv",
+    "b23.wtf",
+    "bili2233.cn",
     "youtube.com",
     "youtu.be",
     "douyin.com",
@@ -311,6 +342,21 @@ class ScreenshotService:
                 detail="请安装依赖后执行：playwright install chromium",
             )
 
+        ip_hit = detect_ip_check_url(url)
+        if ip_hit is not None:
+            return self._skip_result(
+                "检测到查 IP 网站，已拦截以免泄漏服务器地址",
+                category="ip_check",
+                detail=ip_hit.detail,
+            )
+        blocked = match_block_hosts(url, cfg_list_str("block_hosts"))
+        if blocked:
+            return self._skip_result(
+                "该网站已在屏蔽列表中",
+                category="block_host",
+                detail=blocked,
+            )
+
         if not force and _is_video_url(url, []):
             return self._skip_result(
                 "视频链接已跳过",
@@ -331,7 +377,8 @@ class ScreenshotService:
                 detail=f"host={urlparse(url).hostname or ''}",
             )
 
-        direct_check = await self._check_direct_link_by_content_type(url)
+        exit_proxy = await self._resolve_exit_proxy(url)
+        direct_check = await self._check_direct_link_by_content_type(url, exit_proxy)
         if not force and direct_check:
             return self._skip_result(
                 "直链已跳过",
@@ -341,10 +388,16 @@ class ScreenshotService:
 
         async with self._lock:
             try:
-                screenshot = await self._screenshot_page(url)
+                screenshot = await self._screenshot_page(url, exit_proxy)
             except BlankScreenshotError:
                 logger.warning(f"[MikuSnap] 页面截图为空：url={redact_url(url)}")
                 return self._skip_result("页面未渲染出有效内容", category="blank_screenshot")
+            except IpCheckPageError as exc:
+                return self._skip_result(
+                    "检测到查 IP 网站，已拦截以免泄漏服务器地址",
+                    category="ip_check",
+                    detail=exc.hit.detail,
+                )
             except PlaywrightTimeoutError:
                 return self._skip_result("网页加载或截图超时", category="timeout")
             except Exception as exc:
@@ -362,13 +415,31 @@ class ScreenshotService:
             "detail": detail,
         }
 
-    async def _check_direct_link_by_content_type(self, url: str) -> dict[str, Any] | None:
+    @staticmethod
+    async def _resolve_exit_proxy(url: str) -> str:
+        if is_github_fetch_url(url):
+            github = github_http_proxy()
+            if github:
+                return github
+        pooled = await fetch_proxy_pool_server()
+        if pooled:
+            return pooled
+        return screenshot_http_proxy()
+
+    async def _check_direct_link_by_content_type(self, url: str, exit_proxy: str) -> dict[str, Any] | None:
         if is_github_fetch_url(url):
             return None
         timeout = HEAD_TIMEOUT_SECONDS
         headers = {"User-Agent": self._default_user_agent()}
+        client_kwargs: dict[str, object] = {
+            "follow_redirects": False,
+            "timeout": timeout,
+            "headers": headers,
+        }
+        if exit_proxy:
+            client_kwargs["proxy"] = exit_proxy
         try:
-            async with httpx.AsyncClient(follow_redirects=False, timeout=timeout, headers=headers) as client:
+            async with httpx.AsyncClient(**client_kwargs) as client:
                 response = await client.head(url)
                 logger.debug(
                     "直链 HEAD 检查："
@@ -398,10 +469,10 @@ class ScreenshotService:
             return {"content_type": content_type or "unknown", "content_disposition": ""}
         return None
 
-    async def _screenshot_page(self, url: str) -> dict[str, Any]:
+    async def _screenshot_page(self, url: str, exit_proxy: str) -> dict[str, Any]:
         color_scheme = "dark" if dark_mode_enabled() else "light"
         nav_url = resolve_github_url(url) if is_github_fetch_url(url) else url
-        http_proxy = github_http_proxy() if is_github_fetch_url(url) else ""
+        http_proxy = exit_proxy
 
         safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", urlparse(url).netloc)[:80] or "page"
         shot_dir = self.output_dir / f"{int(time.time() * 1000)}_{safe_name}"
@@ -418,7 +489,7 @@ class ScreenshotService:
             )
             browser = await p.chromium.launch(
                 headless=True,
-                args=["--disable-dev-shm-usage", "--no-sandbox"],
+                args=["--disable-dev-shm-usage", "--no-sandbox", "--disable-webrtc"],
             )
             context_kwargs: dict[str, object] = {
                 "viewport": {"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
@@ -430,6 +501,7 @@ class ScreenshotService:
                 context_kwargs["proxy"] = {"server": http_proxy}
             context = await browser.new_context(**context_kwargs)
             try:
+                await context.add_init_script(WEBRTC_BLOCK_SCRIPT)
                 page = await context.new_page()
                 await page.emulate_media(color_scheme=color_scheme)
                 if color_scheme == "dark":
@@ -437,6 +509,17 @@ class ScreenshotService:
                 await page.goto(nav_url, wait_until="domcontentloaded", timeout=LOAD_TIMEOUT_MS)
                 if color_scheme == "dark":
                     await page.evaluate(DARK_MODE_APPLY_SCRIPT)
+                sample = await page.evaluate(PAGE_SAMPLE_SCRIPT)
+                sample_title = ""
+                sample_text = ""
+                if isinstance(sample, dict):
+                    raw_title = sample["title"] if "title" in sample else ""
+                    raw_text = sample["text"] if "text" in sample else ""
+                    sample_title = raw_title if isinstance(raw_title, str) else ""
+                    sample_text = raw_text if isinstance(raw_text, str) else ""
+                page_hit = detect_ip_check_page(sample_title, sample_text)
+                if page_hit is not None:
+                    raise IpCheckPageError(page_hit)
                 await page.evaluate(LAZY_LOAD_SCRIPT)
                 await page.wait_for_timeout(SETTLE_DELAY_MS)
 
@@ -552,8 +635,11 @@ class ScreenshotService:
         return title[:80] or "网页"
 
     def build_skip_reason_message(self, url: str, result: dict[str, Any]) -> str:
-        reason = redact_text(str(result.get("public_reason") or result.get("reason") or "未知原因"))
         redacted_url = redact_url(url)
+        category = result["category"] if "category" in result else ""
+        if category == "ip_check":
+            return build_ip_leak_scold(redacted_url)
+        reason = redact_text(str(result["public_reason"] if "public_reason" in result else result["reason"] if "reason" in result else "未知原因"))
         return SKIP_REASON_TEMPLATE.format(
             reason=reason,
             url=redacted_url,

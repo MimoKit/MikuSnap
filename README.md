@@ -2,7 +2,7 @@
   <a href="https://github.com/MimoKit/MikuSnap"><img src="./ICON.png" width="160" alt="MikuSnap ICON"></a>
 </p>
 
-<h1 align="center">MikuSnap v1.3.0</h1>
+<h1 align="center">MikuSnap v1.3.1</h1>
 <h4 align="center">✨ 基于 GsCore 的网页自动截图 + GitHub 仓库卡片插件 ✨</h4>
 
 <div align="center">
@@ -97,6 +97,8 @@ playwright install chromium
 - 默认深色模式渲染，支持 `prefers-color-scheme: dark` 的网站自动切暗色
 - 截图前预滚动页面触发懒加载，并自动丢弃纯白、纯黑等空白图
 - 智能跳过视频站（B 站 / YouTube / 抖音等）、图片与文件直链、内网地址
+- 拦截国内外查 IP / 泄漏检测站；自定义查 IP 页打开后扫标题正文，命中则丢掉截图并骂回去
+- 可在控制台填写额外屏蔽域名、固定出口代理，或 IP 代理池提取 API（每次截图换一个代理 IP）
 - 超长网页按视口高度用 Pillow 本地切成多张发送
 - 限制同时运行的截图任务数，避免刷屏
 
@@ -124,6 +126,10 @@ playwright install chromium
 | :--- | :---: | :--- |
 | 深色模式 | ✅ | 网页截图与 GitHub 卡片共用；关闭则浅色 |
 | 解析 GitHub 为信息卡片 | ✅ | 关闭后 GitHub 链接改走整页截图 |
+| 额外屏蔽网站 | 空 | 一行一个域名，自动/手动都不截 |
+| 截图出口代理（伪装 IP） | 空 | 固定代理兜底，如 `http://127.0.0.1:7890` |
+| IP 代理池提取 API | 空 | 每次截图拉取 `ip:port`，用代理池 IP 访问 |
+| 代理池协议 | http | 稻米 httptype=1 用 http |
 | GitHub 网页代理 | 空 | 如 `https://gh-proxy.com` |
 | GitHub HTTP/SOCKS 代理 | 空 | 如 `http://127.0.0.1:7890` |
 | GitHub Token | 空 | 可选，提高 API 限额 |

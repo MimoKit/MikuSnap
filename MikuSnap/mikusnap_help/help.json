@@ -61,7 +61,7 @@
     "data": [
       {
         "name": "跳过规则",
-        "eg": "视频/直链/内网地址自动跳过",
+        "eg": "视频/直链/内网/查IP网站自动跳过",
         "need_ck": false,
         "need_sk": false,
         "need_admin": false
@@ -69,6 +69,27 @@
       {
         "name": "长页分图",
         "eg": "超长网页按视口切成多张发送",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "查IP拦截",
+        "eg": "查 IP 站不截图，并骂回去",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "额外屏蔽",
+        "eg": "控制台可填要屏蔽的域名",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "代理池",
+        "eg": "填提取 API，用代理 IP 去截图",
         "need_ck": false,
         "need_sk": false,
         "need_admin": false
