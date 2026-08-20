@@ -16,5 +16,6 @@ if Plugins is not None:
 
     from . import mikusnap_config  # noqa: F401
     from . import mikusnap_capture  # noqa: F401
+    from . import mikusnap_github  # noqa: F401
     from . import mikusnap_help  # noqa: F401
     from . import mikusnap_status  # noqa: F401

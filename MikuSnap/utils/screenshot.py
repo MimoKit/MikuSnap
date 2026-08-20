@@ -14,6 +14,7 @@ from gsuid_core.logger import logger
 from gsuid_core.segment import MessageSegment
 
 from .config import dark_mode_enabled
+from .github_proxy import github_http_proxy, is_github_fetch_url, resolve_github_url
 from .image_quality import is_blank_image
 from .resource.RESOURCE_PATH import SCREENSHOT_PATH
 
@@ -26,6 +27,7 @@ except Exception:  # pragma: no cover
 
 URL_RE = re.compile(r"https?://[^\s<>'\"，。！？、（）()【】\[\]{}]+", re.IGNORECASE)
 MANUAL_COMMANDS = ("网页截图", "webshot", "网页快照")
+GITHUB_COMMANDS = ("仓库卡片", "github卡片")
 VIEWPORT_WIDTH = 1365
 VIEWPORT_HEIGHT = 900
 LOAD_TIMEOUT_MS = 30_000
@@ -195,7 +197,11 @@ def extract_urls(text: str) -> list[str]:
 
 def looks_like_manual_command(text: str) -> bool:
     stripped = text.strip().lower()
-    return any(stripped.startswith(command.lower()) for command in MANUAL_COMMANDS)
+    if any(stripped.startswith(command.lower()) for command in MANUAL_COMMANDS):
+        return True
+    if stripped.startswith("github ") or stripped.startswith("github\t"):
+        return True
+    return any(stripped.startswith(command.lower()) for command in GITHUB_COMMANDS)
 
 
 def url_path_suffix(url: str) -> str:
@@ -357,6 +363,8 @@ class ScreenshotService:
         }
 
     async def _check_direct_link_by_content_type(self, url: str) -> dict[str, Any] | None:
+        if is_github_fetch_url(url):
+            return None
         timeout = HEAD_TIMEOUT_SECONDS
         headers = {"User-Agent": self._default_user_agent()}
         try:
@@ -392,6 +400,8 @@ class ScreenshotService:
 
     async def _screenshot_page(self, url: str) -> dict[str, Any]:
         color_scheme = "dark" if dark_mode_enabled() else "light"
+        nav_url = resolve_github_url(url) if is_github_fetch_url(url) else url
+        http_proxy = github_http_proxy() if is_github_fetch_url(url) else ""
 
         safe_name = re.sub(r"[^a-zA-Z0-9_.-]+", "_", urlparse(url).netloc)[:80] or "page"
         shot_dir = self.output_dir / f"{int(time.time() * 1000)}_{safe_name}"
@@ -401,25 +411,30 @@ class ScreenshotService:
             logger.debug(
                 "开始截图："
                 f"url={redact_url(url)} "
+                f"nav={redact_url(nav_url)} "
                 f"viewport={VIEWPORT_WIDTH}x{VIEWPORT_HEIGHT} "
-                f"color_scheme={color_scheme}"
+                f"color_scheme={color_scheme} "
+                f"http_proxy={'on' if http_proxy else 'off'}"
             )
             browser = await p.chromium.launch(
                 headless=True,
                 args=["--disable-dev-shm-usage", "--no-sandbox"],
             )
-            context = await browser.new_context(
-                viewport={"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
-                user_agent=self._default_user_agent(),
-                ignore_https_errors=True,
-                color_scheme=color_scheme,
-            )
+            context_kwargs: dict[str, object] = {
+                "viewport": {"width": VIEWPORT_WIDTH, "height": VIEWPORT_HEIGHT},
+                "user_agent": self._default_user_agent(),
+                "ignore_https_errors": True,
+                "color_scheme": color_scheme,
+            }
+            if http_proxy:
+                context_kwargs["proxy"] = {"server": http_proxy}
+            context = await browser.new_context(**context_kwargs)
             try:
                 page = await context.new_page()
                 await page.emulate_media(color_scheme=color_scheme)
                 if color_scheme == "dark":
                     await page.add_init_script(DARK_MODE_INIT_SCRIPT)
-                await page.goto(url, wait_until="domcontentloaded", timeout=LOAD_TIMEOUT_MS)
+                await page.goto(nav_url, wait_until="domcontentloaded", timeout=LOAD_TIMEOUT_MS)
                 if color_scheme == "dark":
                     await page.evaluate(DARK_MODE_APPLY_SCRIPT)
                 await page.evaluate(LAZY_LOAD_SCRIPT)

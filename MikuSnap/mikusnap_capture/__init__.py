@@ -8,6 +8,7 @@ from gsuid_core.logger import logger
 from gsuid_core.models import Event
 from gsuid_core.sv import SV
 
+from ..mikusnap_github import try_handle_github_url
 from ..utils.screenshot import (
     MANUAL_COMMANDS,
     ScreenshotService,
@@ -95,6 +96,8 @@ async def screenshot_command(bot: Bot, ev: Event) -> None:
         return
 
     logger.info(f"[MikuSnap] 手动截图：url={redact_url(normalized_url)}")
+    if await try_handle_github_url(bot, normalized_url):
+        return
     result = await service.handle_url(normalized_url, force=True)
     await _send_result(bot, normalized_url, result)
 
@@ -112,6 +115,8 @@ async def auto_screenshot(bot: Bot, ev: Event) -> None:
 
     logger.info(f"[MikuSnap] 收到网页链接：count={len(urls)} urls={', '.join(redact_url(url) for url in urls)}")
     for url in urls[:MAX_URLS_PER_MESSAGE]:
+        if await try_handle_github_url(bot, url):
+            continue
         result = await service.handle_url(url, force=False)
         if result["ok"]:
             service.log_success(url, result)

@@ -18,6 +18,32 @@
       }
     ]
   },
+  "GitHub 解析": {
+    "desc": "仓库/用户信息卡片，支持深色主题与网页代理",
+    "data": [
+      {
+        "name": "仓库卡片",
+        "eg": "仓库卡片 KroMiose/nekro-agent",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "github",
+        "eg": "github https://github.com/KroMiose/nekro-agent",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "自动识别",
+        "eg": "直接发送 github.com 仓库或用户链接",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      }
+    ]
+  },
   "自动解析": {
     "desc": "聊天中发送 http/https 链接，机器人自动截图",
     "data": [
@@ -43,6 +69,13 @@
       {
         "name": "长页分图",
         "eg": "超长网页按视口切成多张发送",
+        "need_ck": false,
+        "need_sk": false,
+        "need_admin": false
+      },
+      {
+        "name": "深色模式",
+        "eg": "网页截图与 GitHub 卡片共用深色配置",
         "need_ck": false,
         "need_sk": false,
         "need_admin": false

@@ -32,7 +32,7 @@ async def get_help():
         plugin_prefix=get_plugin_available_prefix("MikuSnap"),
         help_mode="dark",
         banner_bg=Image.open(TEXT_PATH / "banner_bg.jpg"),
-        banner_sub_text="自动识别链接 · Playwright 截图",
+        banner_sub_text="自动识别链接 · GitHub 卡片 · Playwright 截图",
         help_bg=Image.open(TEXT_PATH / "bg.jpg"),
         cag_bg=Image.open(TEXT_PATH / "cag_bg.png"),
         item_bg=Image.open(TEXT_PATH / "item.png"),

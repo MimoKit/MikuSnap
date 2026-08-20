@@ -15,6 +15,7 @@ env/
 .test_data/
 data/
 screenshots/
+preview/
 *.log
 
 *.tar.gz
